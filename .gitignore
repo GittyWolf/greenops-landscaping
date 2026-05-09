@@ -1,0 +1,11 @@
+.env
+landscaping.db
+__pycache__/
+*.pyc
+*.pyo
+.DS_Store
+venv/
+.venv/
+node_modules/
+frontend/dist/
+frontend/node_modules/
