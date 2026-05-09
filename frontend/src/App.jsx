@@ -11,29 +11,15 @@ document.head.appendChild(themeStyle);
 const API = import.meta.env.VITE_API_URL || "http://localhost:5000/api";
 
 const darkPalette = {
-  bg: "#0d1117",
-  card: "#161b22",
-  border: "#30363d",
-  green: "#3fb950",
-  greenDim: "#1a3a22",
-  red: "#f85149",
-  yellow: "#d29922",
-  blue: "#58a6ff",
-  text: "#e6edf3",
-  muted: "#8b949e",
+  bg: "#0d1117", card: "#161b22", border: "#30363d", green: "#3fb950",
+  greenDim: "#1a3a22", red: "#f85149", yellow: "#d29922", blue: "#58a6ff",
+  text: "#e6edf3", muted: "#8b949e",
 };
 
 const lightPalette = {
-  bg: "#ffffff",
-  card: "#f6f8fa",
-  border: "#d0d7de",
-  green: "#3fb950",
-  greenDim: "#ddf4e4",
-  red: "#cf222e",
-  yellow: "#9a6700",
-  blue: "#0969da",
-  text: "#1f2328",
-  muted: "#636e7b",
+  bg: "#ffffff", card: "#f6f8fa", border: "#d0d7de", green: "#3fb950",
+  greenDim: "#ddf4e4", red: "#cf222e", yellow: "#9a6700", blue: "#0969da",
+  text: "#1f2328", muted: "#636e7b",
 };
 
 const ThemeContext = React.createContext(darkPalette);
@@ -58,6 +44,7 @@ const makeStyles = (p) => ({
 
 const fmt$ = (n) => `$${Number(n || 0).toFixed(2)}`;
 const fmtPct = (n) => `${Number(n || 0).toFixed(1)}%`;
+const marginColor = (margin, p) => margin >= 20 ? p.green : margin >= 10 ? p.yellow : p.red;
 
 function StatCard({ label, value, sub, color }) {
   const palette = React.useContext(ThemeContext);
@@ -69,6 +56,212 @@ function StatCard({ label, value, sub, color }) {
       <div style={{ color: palette.muted, fontSize: 11, fontFamily: "'Space Mono', monospace", letterSpacing: 1, textTransform: "uppercase", marginBottom: 6 }}>{label}</div>
       <div style={{ color: color || palette.text, fontSize: 22, fontWeight: 700, fontFamily: "'Space Mono', monospace" }}>{value}</div>
       {sub && <div style={{ color: palette.muted, fontSize: 12, marginTop: 4 }}>{sub}</div>}
+    </div>
+  );
+}
+
+function Reports({ defaultMonth }) {
+  const palette = React.useContext(ThemeContext);
+  const { inputStyle } = makeStyles(palette);
+  const [reportType, setReportType] = useState("weekly");
+  const [reportMonth, setReportMonth] = useState(defaultMonth || new Date().toISOString().slice(0, 7));
+  const [weeklyData, setWeeklyData] = useState(null);
+  const [monthlyData, setMonthlyData] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const EXPENSE_COLORS = [palette.green, palette.blue, palette.yellow, palette.red, "#a5d6ff"];
+
+  useEffect(() => {
+    setLoading(true);
+    if (reportType === "weekly") {
+      fetch(`${API}/reports/weekly?date=${new Date().toISOString().slice(0, 10)}&hourly_rate=25`)
+        .then(r => r.json()).then(d => { setWeeklyData(d); setLoading(false); })
+        .catch(() => setLoading(false));
+    } else {
+      fetch(`${API}/reports/monthly?month=${reportMonth}&hourly_rate=25`)
+        .then(r => r.json()).then(d => { setMonthlyData(d); setLoading(false); })
+        .catch(() => setLoading(false));
+    }
+  }, [reportType, reportMonth]);
+
+  return (
+    <div>
+      <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 16, flexWrap: "wrap" }}>
+        {["weekly", "monthly"].map(t => (
+          <button key={t} onClick={() => setReportType(t)} style={{
+            background: reportType === t ? palette.green : "transparent",
+            color: reportType === t ? palette.bg : palette.muted,
+            border: `1px solid ${reportType === t ? palette.green : palette.border}`,
+            borderRadius: 20, padding: "5px 14px", fontSize: 11, cursor: "pointer",
+            fontFamily: "'Space Mono', monospace", textTransform: "capitalize",
+            fontWeight: reportType === t ? 700 : 400,
+          }}>{t}</button>
+        ))}
+        {reportType === "monthly" && (
+          <input type="month" value={reportMonth} onChange={e => setReportMonth(e.target.value)}
+            style={{ ...inputStyle, fontSize: 12, padding: "5px 10px" }} />
+        )}
+      </div>
+
+      {loading && (
+        <div style={{ color: palette.muted, textAlign: "center", padding: 40, fontFamily: "'Space Mono', monospace", fontSize: 13 }}>
+          Loading...
+        </div>
+      )}
+
+      {/* ── Weekly view ── */}
+      {!loading && reportType === "weekly" && weeklyData && (
+        <>
+          <div style={{ color: palette.muted, fontSize: 11, fontFamily: "'Space Mono', monospace", marginBottom: 10 }}>
+            WEEK OF {weeklyData.week_start} — {weeklyData.week_end}
+          </div>
+          <div style={{ display: "flex", gap: 10, marginBottom: 16 }}>
+            <StatCard label="Week Revenue" value={fmt$(weeklyData.total_revenue)} color={palette.green} />
+            <StatCard label="Week Profit" value={fmt$(weeklyData.total_profit)} color={weeklyData.total_profit >= 0 ? palette.green : palette.red} />
+          </div>
+
+          <div style={{ background: palette.card, border: `1px solid ${palette.border}`, borderRadius: 12, padding: "14px 10px", marginBottom: 16 }}>
+            <div style={{ color: palette.muted, fontSize: 11, fontFamily: "'Space Mono', monospace", marginBottom: 10, paddingLeft: 6 }}>DAILY NET PROFIT</div>
+            <ResponsiveContainer width="100%" height={180}>
+              <BarChart data={weeklyData.days} margin={{ left: -20 }}>
+                <XAxis dataKey="day" tick={{ fill: palette.muted, fontSize: 10 }} />
+                <YAxis tick={{ fill: palette.muted, fontSize: 10 }} />
+                <Tooltip contentStyle={{ background: palette.card, border: `1px solid ${palette.border}`, borderRadius: 8, color: palette.text }}
+                  formatter={(v) => [fmt$(v), "profit"]} />
+                <Bar dataKey="profit" radius={[4, 4, 0, 0]}>
+                  {weeklyData.days.map((d, i) => (
+                    <Cell key={i} fill={marginColor(d.margin_pct, palette)} />
+                  ))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+            <div style={{ display: "flex", gap: 14, justifyContent: "center", marginTop: 8 }}>
+              {[{ c: palette.green, l: "≥20% margin" }, { c: palette.yellow, l: "10–20%" }, { c: palette.red, l: "<10%" }].map(({ c, l }) => (
+                <div key={l} style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 10, color: palette.muted, fontFamily: "'Space Mono', monospace" }}>
+                  <div style={{ width: 10, height: 10, borderRadius: 2, background: c }} />{l}
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div style={{ background: palette.card, border: `1px solid ${palette.border}`, borderRadius: 12, padding: 14 }}>
+            <div style={{ color: palette.muted, fontSize: 11, fontFamily: "'Space Mono', monospace", marginBottom: 10 }}>DAY BREAKDOWN</div>
+            {weeklyData.days.map(d => (
+              <div key={d.date} style={{ display: "flex", justifyContent: "space-between", padding: "8px 0", borderBottom: `1px solid ${palette.border}22` }}>
+                <div>
+                  <span style={{ fontFamily: "'Space Mono', monospace", fontSize: 12, color: palette.text }}>{d.day}</span>
+                  <span style={{ color: palette.muted, fontSize: 11, marginLeft: 8 }}>{d.date}</span>
+                  {d.job_count > 0 && <span style={{ color: palette.muted, fontSize: 11, marginLeft: 8 }}>{d.job_count} job{d.job_count !== 1 ? "s" : ""}</span>}
+                </div>
+                <div style={{ textAlign: "right" }}>
+                  <span style={{ color: marginColor(d.margin_pct, palette), fontFamily: "'Space Mono', monospace", fontSize: 12 }}>{fmt$(d.profit)}</span>
+                  {d.revenue > 0 && <span style={{ color: palette.muted, fontSize: 10, marginLeft: 6 }}>{fmtPct(d.margin_pct)}</span>}
+                </div>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+
+      {/* ── Monthly view ── */}
+      {!loading && reportType === "monthly" && monthlyData && (
+        <>
+          <div style={{ display: "flex", gap: 10, marginBottom: 16 }}>
+            <StatCard label="Month Revenue" value={fmt$(monthlyData.total_revenue)} color={palette.green} />
+            <StatCard label="Month Profit" value={fmt$(monthlyData.total_profit)} color={monthlyData.total_profit >= 0 ? palette.green : palette.red} />
+          </div>
+
+          {monthlyData.weekly_breakdown?.length > 0 ? (
+            <>
+              <div style={{ background: palette.card, border: `1px solid ${palette.border}`, borderRadius: 12, padding: "14px 10px", marginBottom: 16 }}>
+                <div style={{ color: palette.muted, fontSize: 11, fontFamily: "'Space Mono', monospace", marginBottom: 10, paddingLeft: 6 }}>WEEKLY NET PROFIT</div>
+                <ResponsiveContainer width="100%" height={180}>
+                  <BarChart data={monthlyData.weekly_breakdown} margin={{ left: -20 }}>
+                    <XAxis dataKey="label" tick={{ fill: palette.muted, fontSize: 10 }} />
+                    <YAxis tick={{ fill: palette.muted, fontSize: 10 }} />
+                    <Tooltip contentStyle={{ background: palette.card, border: `1px solid ${palette.border}`, borderRadius: 8, color: palette.text }}
+                      formatter={(v) => [fmt$(v), "profit"]} />
+                    <Bar dataKey="profit" radius={[4, 4, 0, 0]}>
+                      {monthlyData.weekly_breakdown.map((w, i) => (
+                        <Cell key={i} fill={marginColor(w.margin_pct, palette)} />
+                      ))}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+                {monthlyData.weekly_breakdown.some(w => w.below_20pct_margin) && (
+                  <div style={{ marginTop: 10, padding: "7px 10px", background: palette.red + "22", border: `1px solid ${palette.red}44`, borderRadius: 6, color: palette.red, fontSize: 11, fontFamily: "'Space Mono', monospace" }}>
+                    ⚠️ {monthlyData.weekly_breakdown.filter(w => w.below_20pct_margin).length} week(s) below 20% margin
+                  </div>
+                )}
+              </div>
+
+              {Object.keys(monthlyData.expense_by_category || {}).length > 0 && (
+                <div style={{ background: palette.card, border: `1px solid ${palette.border}`, borderRadius: 12, padding: 14, marginBottom: 16 }}>
+                  <div style={{ color: palette.muted, fontSize: 11, fontFamily: "'Space Mono', monospace", marginBottom: 10 }}>EXPENSE BREAKDOWN</div>
+                  <ResponsiveContainer width="100%" height={160}>
+                    <PieChart>
+                      <Pie data={Object.entries(monthlyData.expense_by_category).map(([k, v]) => ({ name: k, value: v }))}
+                        cx="50%" cy="50%" outerRadius={65} dataKey="value"
+                        label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                        labelLine={{ stroke: palette.muted }} fontSize={10}>
+                        {Object.keys(monthlyData.expense_by_category).map((_, i) => (
+                          <Cell key={i} fill={EXPENSE_COLORS[i % EXPENSE_COLORS.length]} />
+                        ))}
+                      </Pie>
+                      <Tooltip contentStyle={{ background: palette.card, border: `1px solid ${palette.border}` }} />
+                    </PieChart>
+                  </ResponsiveContainer>
+                </div>
+              )}
+
+              {monthlyData.top_jobs?.length > 0 && (
+                <div style={{ background: palette.card, border: `1px solid ${palette.border}`, borderRadius: 12, padding: 14, marginBottom: 16 }}>
+                  <div style={{ color: palette.muted, fontSize: 11, fontFamily: "'Space Mono', monospace", marginBottom: 10 }}>TOP JOBS BY MARGIN</div>
+                  {monthlyData.top_jobs.map((j, i) => (
+                    <div key={j.job_id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 0", borderBottom: `1px solid ${palette.border}22` }}>
+                      <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                        <span style={{ color: palette.green, fontFamily: "'Space Mono', monospace", fontSize: 12, fontWeight: 700 }}>#{i + 1}</span>
+                        <div>
+                          <div style={{ fontSize: 12, color: palette.text }}>{j.client}</div>
+                          <div style={{ fontSize: 10, color: palette.muted }}>{j.date}</div>
+                        </div>
+                      </div>
+                      <div style={{ textAlign: "right" }}>
+                        <div style={{ color: marginColor(j.margin_pct, palette), fontFamily: "'Space Mono', monospace", fontSize: 12 }}>{fmtPct(j.margin_pct)}</div>
+                        <div style={{ color: palette.muted, fontSize: 10 }}>{fmt$(j.profit)} profit</div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {monthlyData.bottom_jobs?.length > 0 && (
+                <div style={{ background: palette.card, border: `1px solid ${palette.border}`, borderRadius: 12, padding: 14 }}>
+                  <div style={{ color: palette.muted, fontSize: 11, fontFamily: "'Space Mono', monospace", marginBottom: 10 }}>LOWEST MARGIN JOBS</div>
+                  {monthlyData.bottom_jobs.map((j) => (
+                    <div key={j.job_id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 0", borderBottom: `1px solid ${palette.border}22` }}>
+                      <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                        <span style={{ fontSize: 12 }}>⚠️</span>
+                        <div>
+                          <div style={{ fontSize: 12, color: palette.text }}>{j.client}</div>
+                          <div style={{ fontSize: 10, color: palette.muted }}>{j.date}</div>
+                        </div>
+                      </div>
+                      <div style={{ textAlign: "right" }}>
+                        <div style={{ color: marginColor(j.margin_pct, palette), fontFamily: "'Space Mono', monospace", fontSize: 12 }}>{fmtPct(j.margin_pct)}</div>
+                        <div style={{ color: palette.muted, fontSize: 10 }}>{fmt$(j.profit)} profit</div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </>
+          ) : (
+            <div style={{ color: palette.muted, textAlign: "center", padding: 40, fontFamily: "'Space Mono', monospace", fontSize: 13 }}>
+              No data for {reportMonth}
+            </div>
+          )}
+        </>
+      )}
     </div>
   );
 }
@@ -113,7 +306,6 @@ function AskClaude({ summary }) {
     rec.lang = "en-US";
     rec.interimResults = false;
     rec.maxAlternatives = 1;
-
     rec.onstart = () => setListening(true);
     rec.onend = () => setListening(false);
     rec.onerror = () => setListening(false);
@@ -122,7 +314,6 @@ function AskClaude({ summary }) {
       setQ(transcript);
       ask(transcript);
     };
-
     recognitionRef.current = rec;
     rec.start();
   };
@@ -152,28 +343,18 @@ function AskClaude({ summary }) {
       </div>
 
       <div style={{ display: "flex", gap: 8 }}>
-        <input
-          value={q}
-          onChange={e => setQ(e.target.value)}
-          onKeyDown={e => e.key === "Enter" && ask()}
+        <input value={q} onChange={e => setQ(e.target.value)} onKeyDown={e => e.key === "Enter" && ask()}
           placeholder="Ask anything about your business..."
-          style={{ ...inputStyle, flex: 1, padding: "10px 14px", fontSize: 14 }}
-        />
+          style={{ ...inputStyle, flex: 1, padding: "10px 14px", fontSize: 14 }} />
         {SpeechRecognition && (
-          <button
-            onClick={toggleMic}
-            title={listening ? "Stop listening" : "Speak your question"}
-            style={{
-              background: listening ? palette.green : palette.card,
-              border: `1px solid ${listening ? palette.green : palette.border}`,
-              borderRadius: 8, padding: "10px 13px", cursor: "pointer",
-              fontSize: 16, lineHeight: 1, flexShrink: 0,
-              animation: listening ? "pulse 1s ease-in-out infinite" : "none",
-              boxShadow: listening ? `0 0 12px ${palette.green}88` : "none",
-            }}
-          >
-            🎤
-          </button>
+          <button onClick={toggleMic} title={listening ? "Stop listening" : "Speak your question"} style={{
+            background: listening ? palette.green : palette.card,
+            border: `1px solid ${listening ? palette.green : palette.border}`,
+            borderRadius: 8, padding: "10px 13px", cursor: "pointer",
+            fontSize: 16, lineHeight: 1, flexShrink: 0,
+            animation: listening ? "pulse 1s ease-in-out infinite" : "none",
+            boxShadow: listening ? `0 0 12px ${palette.green}88` : "none",
+          }}>🎤</button>
         )}
         <button onClick={() => ask()} disabled={loading} style={{ ...btnPrimary, opacity: loading ? 0.6 : 1 }}>
           {loading ? "..." : "Ask"}
@@ -185,9 +366,7 @@ function AskClaude({ summary }) {
           marginTop: 14, background: palette.bg, border: `1px solid ${palette.green}44`,
           borderRadius: 8, padding: 14, color: palette.text, fontSize: 13,
           lineHeight: 1.7, fontFamily: "Georgia, serif", whiteSpace: "pre-wrap",
-        }}>
-          {answer}
-        </div>
+        }}>{answer}</div>
       )}
     </div>
   );
@@ -209,23 +388,16 @@ function RouteOptimizer() {
   const optimize = async () => {
     setLoading(true);
     setResult(null);
-
-    let payload = {
-      start_address: start,
-      job_addresses: stops.filter(s => s.trim()),
-    };
-
+    let payload = { start_address: start, job_addresses: stops.filter(s => s.trim()) };
     if (useGPS && navigator.geolocation) {
       await new Promise(res => navigator.geolocation.getCurrentPosition(pos => {
         payload.current_location = { lat: pos.coords.latitude, lng: pos.coords.longitude };
         res();
       }, res));
     }
-
     try {
       const r = await fetch(`${API}/optimize-route`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
+        method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
       setResult(await r.json());
@@ -237,38 +409,27 @@ function RouteOptimizer() {
 
   return (
     <div style={{ background: palette.card, border: `1px solid ${palette.border}`, borderRadius: 12, padding: 18 }}>
-      <div style={{ color: palette.text, fontWeight: 600, fontFamily: "'Space Mono', monospace", fontSize: 13, marginBottom: 14 }}>
-        📍 Route Optimizer
-      </div>
-
+      <div style={{ color: palette.text, fontWeight: 600, fontFamily: "'Space Mono', monospace", fontSize: 13, marginBottom: 14 }}>📍 Route Optimizer</div>
       <label style={{ display: "flex", alignItems: "center", gap: 8, color: palette.muted, fontSize: 12, marginBottom: 12, cursor: "pointer" }}>
         <input type="checkbox" checked={useGPS} onChange={e => setUseGPS(e.target.checked)} />
         Use my current GPS location as start
       </label>
-
       {!useGPS && (
-        <input value={start} onChange={e => setStart(e.target.value)}
-          placeholder="Start address (e.g. 123 Main St)"
+        <input value={start} onChange={e => setStart(e.target.value)} placeholder="Start address"
           style={{ ...inputStyle, marginBottom: 10, width: "100%", boxSizing: "border-box" }} />
       )}
-
       {stops.map((s, i) => (
         <div key={i} style={{ display: "flex", gap: 6, marginBottom: 6 }}>
-          <input value={s} onChange={e => updateStop(i, e.target.value)}
-            placeholder={`Stop ${i + 1} address`} style={{ ...inputStyle, flex: 1 }} />
+          <input value={s} onChange={e => updateStop(i, e.target.value)} placeholder={`Stop ${i + 1} address`} style={{ ...inputStyle, flex: 1 }} />
           {stops.length > 1 && (
             <button onClick={() => removeStop(i)} style={{ background: palette.red + "22", border: "none", color: palette.red, borderRadius: 6, padding: "0 10px", cursor: "pointer" }}>✕</button>
           )}
         </div>
       ))}
-
       <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
         <button onClick={addStop} style={{ ...btnOutline, flex: 1 }}>+ Add Stop</button>
-        <button onClick={optimize} disabled={loading} style={{ ...btnPrimary, flex: 2 }}>
-          {loading ? "Optimizing..." : "Optimize Route"}
-        </button>
+        <button onClick={optimize} disabled={loading} style={{ ...btnPrimary, flex: 2 }}>{loading ? "Optimizing..." : "Optimize Route"}</button>
       </div>
-
       {result && !result.error && (
         <div style={{ marginTop: 16 }}>
           <div style={{ color: palette.muted, fontSize: 11, marginBottom: 8, fontFamily: "'Space Mono', monospace" }}>
@@ -307,8 +468,7 @@ function AddJob({ onAdded }) {
   const save = async () => {
     setSaving(true);
     await fetch(`${API}/jobs`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
+      method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ ...form, revenue: +form.revenue, labor_hours: +form.labor_hours, materials_cost: +form.materials_cost, fuel_cost: +form.fuel_cost }),
     });
     setSaving(false);
@@ -332,8 +492,7 @@ function AddJob({ onAdded }) {
         {field("labor_hours", "Labor hrs", "number")}
         {field("materials_cost", "Materials $", "number")}
         {field("fuel_cost", "Fuel $", "number")}
-        <select value={form.status} onChange={e => setForm({ ...form, status: e.target.value })}
-          style={{ ...inputStyle, flex: 1, minWidth: 120 }}>
+        <select value={form.status} onChange={e => setForm({ ...form, status: e.target.value })} style={{ ...inputStyle, flex: 1, minWidth: 120 }}>
           <option value="scheduled">Scheduled</option>
           <option value="in_progress">In Progress</option>
           <option value="complete">Complete</option>
@@ -353,10 +512,14 @@ export default function App() {
   const [tab, setTab] = useState("dashboard");
   const [summary, setSummary] = useState(null);
   const [jobs, setJobs] = useState([]);
+  const [expenses, setExpenses] = useState([]);
   const [month, setMonth] = useState(new Date().toISOString().slice(0, 7));
+  const [editingExpenseId, setEditingExpenseId] = useState(null);
+  const [editExpenseDraft, setEditExpenseDraft] = useState({});
 
   const palette = isDark ? darkPalette : lightPalette;
-  const { inputStyle } = makeStyles(palette);
+  const { inputStyle, btnPrimary, btnOutline } = makeStyles(palette);
+  const EXPENSE_COLORS = [palette.green, palette.blue, palette.yellow, palette.red, "#a5d6ff"];
 
   const toggleTheme = () => {
     setIsDark(d => {
@@ -368,21 +531,37 @@ export default function App() {
 
   const loadData = async () => {
     try {
-      const [s, j] = await Promise.all([
+      const [s, j, e] = await Promise.all([
         fetch(`${API}/financials/summary?month=${month}&hourly_rate=25`).then(r => r.json()),
         fetch(`${API}/jobs`).then(r => r.json()),
+        fetch(`${API}/expenses`).then(r => r.json()),
       ]);
       setSummary(s);
       setJobs(j);
+      setExpenses(e);
     } catch {
-      // backend not running — show empty state
+      // backend not running
     }
   };
 
   useEffect(() => { loadData(); }, [month]);
 
-  const EXPENSE_COLORS = [palette.green, palette.blue, palette.yellow, palette.red, "#a5d6ff"];
-  const tabs = ["dashboard", "route", "add job", "ask claude"];
+  const saveExpense = async (id) => {
+    await fetch(`${API}/expenses/${id}`, {
+      method: "PUT", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(editExpenseDraft),
+    });
+    setEditingExpenseId(null);
+    loadData();
+  };
+
+  const deleteExpense = async (id) => {
+    if (!window.confirm("Delete this expense?")) return;
+    await fetch(`${API}/expenses/${id}`, { method: "DELETE" });
+    loadData();
+  };
+
+  const tabs = ["dashboard", "reports", "route", "add job", "ask claude"];
 
   return (
     <ThemeContext.Provider value={palette}>
@@ -394,38 +573,31 @@ export default function App() {
               <span style={{ fontSize: 22, fontWeight: 700, fontFamily: "'Space Mono', monospace", color: palette.green }}>🌿 GreenOps</span>
               <span style={{ fontSize: 12, color: palette.muted, fontFamily: "'Space Mono', monospace" }}>v1.0</span>
             </div>
-            <button
-              onClick={toggleTheme}
-              title={isDark ? "Switch to light mode" : "Switch to dark mode"}
-              style={{
-                background: "none", border: `1px solid ${palette.border}`, borderRadius: 8,
-                padding: "6px 10px", cursor: "pointer", fontSize: 16, lineHeight: 1,
-                color: palette.muted,
-              }}
-            >
-              {isDark ? "☀️" : "🌙"}
-            </button>
+            <button onClick={toggleTheme} title={isDark ? "Switch to light mode" : "Switch to dark mode"} style={{
+              background: "none", border: `1px solid ${palette.border}`, borderRadius: 8,
+              padding: "6px 10px", cursor: "pointer", fontSize: 16, lineHeight: 1, color: palette.muted,
+            }}>{isDark ? "☀️" : "🌙"}</button>
           </div>
-          <div style={{ display: "flex", gap: 6, marginTop: 14 }}>
+          <div style={{ display: "flex", gap: 6, marginTop: 14, flexWrap: "wrap" }}>
             {tabs.map(t => (
               <button key={t} onClick={() => setTab(t)} style={{
                 background: tab === t ? palette.green : "transparent",
                 color: tab === t ? palette.bg : palette.muted,
                 border: `1px solid ${tab === t ? palette.green : palette.border}`,
                 borderRadius: 20, padding: "5px 12px", fontSize: 11, cursor: "pointer",
-                fontFamily: "'Space Mono', monospace", textTransform: "capitalize", fontWeight: tab === t ? 700 : 400,
+                fontFamily: "'Space Mono', monospace", textTransform: "capitalize",
+                fontWeight: tab === t ? 700 : 400,
               }}>{t}</button>
             ))}
           </div>
         </div>
 
         <div style={{ padding: "16px 18px" }}>
-          {/* Month picker shown on dashboard */}
+          {/* Month picker on dashboard */}
           {tab === "dashboard" && (
             <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14 }}>
               <span style={{ color: palette.muted, fontSize: 12, fontFamily: "'Space Mono', monospace" }}>Month:</span>
-              <input type="month" value={month} onChange={e => setMonth(e.target.value)}
-                style={{ ...inputStyle, fontSize: 12 }} />
+              <input type="month" value={month} onChange={e => setMonth(e.target.value)} style={{ ...inputStyle, fontSize: 12 }} />
             </div>
           )}
 
@@ -441,7 +613,6 @@ export default function App() {
                 <StatCard label="Expenses" value={fmt$(summary.total_expenses)} color={palette.yellow} />
               </div>
 
-              {/* Bar chart: revenue vs profit per job */}
               {summary.job_breakdown?.length > 0 && (
                 <div style={{ background: palette.card, border: `1px solid ${palette.border}`, borderRadius: 12, padding: "14px 10px", marginBottom: 16 }}>
                   <div style={{ color: palette.muted, fontSize: 11, fontFamily: "'Space Mono', monospace", marginBottom: 10, paddingLeft: 6 }}>REVENUE vs PROFIT BY JOB</div>
@@ -457,14 +628,14 @@ export default function App() {
                 </div>
               )}
 
-              {/* Expense breakdown pie */}
               {Object.keys(summary.expense_by_category || {}).length > 0 && (
                 <div style={{ background: palette.card, border: `1px solid ${palette.border}`, borderRadius: 12, padding: 14, marginBottom: 16 }}>
                   <div style={{ color: palette.muted, fontSize: 11, fontFamily: "'Space Mono', monospace", marginBottom: 10 }}>EXPENSE BREAKDOWN</div>
                   <ResponsiveContainer width="100%" height={160}>
                     <PieChart>
                       <Pie data={Object.entries(summary.expense_by_category).map(([k, v]) => ({ name: k, value: v }))}
-                        cx="50%" cy="50%" outerRadius={65} dataKey="value" label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                        cx="50%" cy="50%" outerRadius={65} dataKey="value"
+                        label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
                         labelLine={{ stroke: palette.muted }} fontSize={10}>
                         {Object.keys(summary.expense_by_category).map((_, i) => (
                           <Cell key={i} fill={EXPENSE_COLORS[i % EXPENSE_COLORS.length]} />
@@ -476,7 +647,7 @@ export default function App() {
                 </div>
               )}
 
-              {/* Job list */}
+              {/* Recent jobs */}
               <div style={{ color: palette.muted, fontSize: 11, fontFamily: "'Space Mono', monospace", marginBottom: 8 }}>RECENT JOBS</div>
               {jobs.slice(0, 10).map(j => (
                 <div key={j.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 0", borderBottom: `1px solid ${palette.border}22` }}>
@@ -490,6 +661,43 @@ export default function App() {
                   </div>
                 </div>
               ))}
+
+              {/* Expenses with edit/delete */}
+              {expenses.length > 0 && (
+                <>
+                  <div style={{ color: palette.muted, fontSize: 11, fontFamily: "'Space Mono', monospace", marginTop: 20, marginBottom: 8 }}>EXPENSES</div>
+                  {expenses.slice(0, 15).map(e => (
+                    <div key={e.id} style={{ padding: "10px 0", borderBottom: `1px solid ${palette.border}22` }}>
+                      {editingExpenseId === e.id ? (
+                        <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+                          <input value={editExpenseDraft.description || ""} onChange={ev => setEditExpenseDraft({ ...editExpenseDraft, description: ev.target.value })}
+                            placeholder="Description" style={{ ...inputStyle, flex: 2, minWidth: 100, padding: "6px 10px", fontSize: 12 }} />
+                          <input type="number" value={editExpenseDraft.amount || ""} onChange={ev => setEditExpenseDraft({ ...editExpenseDraft, amount: +ev.target.value })}
+                            placeholder="Amount" style={{ ...inputStyle, width: 80, padding: "6px 10px", fontSize: 12 }} />
+                          <input value={editExpenseDraft.category || ""} onChange={ev => setEditExpenseDraft({ ...editExpenseDraft, category: ev.target.value })}
+                            placeholder="Category" style={{ ...inputStyle, width: 90, padding: "6px 10px", fontSize: 12 }} />
+                          <button onClick={() => saveExpense(e.id)} style={{ ...btnPrimary, padding: "7px 12px", fontSize: 12 }}>Save</button>
+                          <button onClick={() => setEditingExpenseId(null)} style={{ ...btnOutline, padding: "7px 10px", fontSize: 12 }}>✕</button>
+                        </div>
+                      ) : (
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                          <div>
+                            <div style={{ fontSize: 13, fontWeight: 600 }}>{e.description}</div>
+                            <div style={{ color: palette.muted, fontSize: 11, marginTop: 2 }}>{e.date} · {e.category}</div>
+                          </div>
+                          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                            <span style={{ color: palette.red, fontFamily: "'Space Mono', monospace", fontSize: 13 }}>{fmt$(e.amount)}</span>
+                            <button onClick={() => { setEditingExpenseId(e.id); setEditExpenseDraft({ description: e.description, amount: e.amount, category: e.category }); }}
+                              style={{ background: "none", border: "none", cursor: "pointer", fontSize: 15, padding: 2 }} title="Edit">✏️</button>
+                            <button onClick={() => deleteExpense(e.id)}
+                              style={{ background: "none", border: "none", cursor: "pointer", fontSize: 15, padding: 2 }} title="Delete">🗑️</button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </>
+              )}
             </>
           )}
 
@@ -500,6 +708,7 @@ export default function App() {
             </div>
           )}
 
+          {tab === "reports" && <Reports defaultMonth={month} />}
           {tab === "route" && <RouteOptimizer />}
           {tab === "add job" && <AddJob onAdded={loadData} />}
           {tab === "ask claude" && <AskClaude summary={summary} />}

@@ -6,7 +6,7 @@ load_dotenv(override=True)
 from flask import Flask, jsonify, request
 from flask_cors import CORS
 from routes.optimize import optimize_route
-from routes.financials import calculate_job_profit, get_monthly_summary
+from routes.financials import calculate_job_profit, get_monthly_summary, get_weekly_summary, get_monthly_report
 from agents.claude_agent import ask_claude
 from models.db import db, Job, Expense, Client
 
@@ -103,19 +103,51 @@ def expenses():
         return jsonify(exp.to_dict()), 201
     return jsonify([e.to_dict() for e in Expense.query.order_by(Expense.date.desc()).all()])
 
+@app.route("/api/expenses/<int:expense_id>", methods=["PUT", "DELETE"])
+def expense_detail(expense_id):
+    exp = Expense.query.get_or_404(expense_id)
+    if request.method == "PUT":
+        data = request.json
+        for key, val in data.items():
+            setattr(exp, key, val)
+        db.session.commit()
+        return jsonify(exp.to_dict())
+    if request.method == "DELETE":
+        db.session.delete(exp)
+        db.session.commit()
+        return jsonify({"deleted": True})
+
+@app.route("/api/reports/weekly", methods=["GET"])
+def reports_weekly():
+    date_str = request.args.get("date")
+    hourly_rate = float(request.args.get("hourly_rate", 25))
+    return jsonify(get_weekly_summary(date_str, hourly_rate))
+
+@app.route("/api/reports/monthly", methods=["GET"])
+def reports_monthly():
+    month_str = request.args.get("month")
+    hourly_rate = float(request.args.get("hourly_rate", 25))
+    return jsonify(get_monthly_report(month_str, hourly_rate))
+
 @app.route("/api/ask", methods=["POST"])
 def ask():
     data = request.json
     question = data.get("question", "")
     month = data.get("month")
     hourly_rate = float(data.get("hourly_rate", 25))
+
     summary = get_monthly_summary(month, hourly_rate)
-    recent_jobs = [j.to_dict() for j in Job.query.order_by(Job.date.desc()).limit(10).all()]
-    recent_expenses = [e.to_dict() for e in Expense.query.order_by(Expense.date.desc()).limit(10).all()]
+    weekly = get_weekly_summary(hourly_rate=hourly_rate)
+    monthly_report = get_monthly_report(month, hourly_rate)
+
+    job_breakdown = summary.get("job_breakdown", [])
     context = {
-        "monthly_summary": summary,
-        "recent_jobs": recent_jobs,
-        "recent_expenses": recent_expenses,
+        "monthly_summary": {k: v for k, v in summary.items() if k != "job_breakdown"},
+        "weekly_breakdown": weekly,
+        "monthly_weekly_breakdown": monthly_report.get("weekly_breakdown", []),
+        "expense_by_category": monthly_report.get("expense_by_category", {}),
+        "top_3_jobs_by_margin": job_breakdown[:3],
+        "bottom_3_jobs_by_margin": job_breakdown[-3:] if len(job_breakdown) > 3 else [],
     }
     answer = ask_claude(question, context)
     return jsonify({"answer": answer})
