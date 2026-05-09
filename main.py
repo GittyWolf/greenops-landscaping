@@ -1,13 +1,14 @@
+from dotenv import load_dotenv
+import os
+
+load_dotenv(override=True)
+
 from flask import Flask, jsonify, request
 from flask_cors import CORS
 from routes.optimize import optimize_route
 from routes.financials import calculate_job_profit, get_monthly_summary
 from agents.claude_agent import ask_claude
 from models.db import db, Job, Expense, Client
-from dotenv import load_dotenv
-import os
-
-load_dotenv()
 
 app = Flask(__name__)
 CORS(app)
